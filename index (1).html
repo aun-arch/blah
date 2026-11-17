@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<title>LifeLink</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a live radar of the neighbourhood on the left (sticky), a searchable feed of signals on the right.
+   Three signal types, each with its own colour AND shape: Need (circle), Offer (diamond), Organizing (triangle). */
+:root{
+  --bg:#EAF0EE; --surface:#F7FAF9; --ink:#0D211D; --ink-2:#44585A; --line:#C6D3D0; --grid:#AFC1BD;
+  --need:#C23A1E; --offer:#0B7A6B; --meet:#4B38C9;
+  --display:'Bricolage Grotesque',system-ui,sans-serif;
+  --body:'Instrument Sans',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#08161A; --surface:#0E2025; --ink:#E3F0ED; --ink-2:#92ABA8; --line:#1E393E; --grid:#27484D;
+    --need:#FF7452; --offer:#3FD6BE; --meet:#A094FF; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#08161A; --surface:#0E2025; --ink:#E3F0ED; --ink-2:#92ABA8; --line:#1E393E; --grid:#27484D;
+  --need:#FF7452; --offer:#3FD6BE; --meet:#A094FF; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink); font:15px/1.5 var(--body);
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:18px 64px;
+}
+.wrap{max-width:1180px; margin:0 auto}
+h1,h2,h3,p{margin:0}
+h1,h2,h3{font-family:var(--display); text-wrap:balance}
+button{font:inherit; color:inherit; cursor:pointer}
+:focus-visible{outline:2px solid var(--ink); outline-offset:2px}
+
+/* Header */
+.top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.brand{display:flex; align-items:center; gap:10px; font-family:var(--display); font-weight:700; font-size:1.35rem; letter-spacing:-.02em}
+.brand svg{width:30px; height:30px}
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  border:1px solid var(--ink); background:var(--ink); color:var(--bg);
+  padding:9px 16px; border-radius:8px; font-weight:600; line-height:1.2;
+}
+.btn.ghost{background:transparent; color:var(--ink); border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink)}
+.btn.sm{padding:7px 12px; font-size:.875rem}
+.btn[aria-pressed="true"].joinbtn{background:transparent; color:var(--ink); border-color:var(--ink)}
+
+.hero{padding:34px 0 22px; display:grid; gap:14px}
+.hero h1{font-size:clamp(2.1rem,5.6vw,3.9rem); font-weight:700; line-height:1.02; letter-spacing:-.03em; max-width:16ch}
+.hero p{color:var(--ink-2); max-width:54ch; font-size:1.0625rem}
+.live{display:inline-flex; align-items:center; gap:9px; font-family:var(--mono); font-size:.8125rem; color:var(--ink-2); letter-spacing:.02em}
+.live i{width:8px; height:8px; border-radius:50%; background:var(--offer); display:inline-block; animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{50%{opacity:.25}}
+
+/* Controls */
+.controls{display:grid; gap:12px; margin-bottom:22px}
+.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.row > .grow{flex:1 1 240px; min-width:0}
+input[type=search],input[type=text],select,textarea{
+  font:inherit; color:var(--ink); background:var(--surface); border:1px solid var(--line);
+  border-radius:8px; padding:9px 11px; width:100%; min-width:0;
+}
+select{width:auto}
+textarea{resize:vertical; min-height:76px}
+input[type=range]{width:100%; accent-color:var(--ink)}
+.chips{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.chip{
+  display:inline-flex; align-items:center; gap:7px; background:transparent; border:1px solid var(--line);
+  border-radius:999px; padding:6px 12px; font-size:.875rem; font-weight:500;
+}
+.chip[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+.chip .g{flex:none}
+.lbl{font-family:var(--mono); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-2)}
+.sep{width:1px; height:22px; background:var(--line); margin:0 4px}
+
+/* Glyphs */
+.g-need{fill:var(--need)} .g-offer{fill:var(--offer)} .g-meet{fill:var(--meet)}
+.chip[aria-pressed="true"] .g{fill:currentColor}
+
+/* Composer */
+.composer{
+  display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:26px;
+  background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:22px; margin-bottom:26px;
+}
+.composer h2{font-size:1.35rem; letter-spacing:-.01em; margin-bottom:4px}
+.composer .hint{color:var(--ink-2); font-size:.9rem; margin-bottom:16px}
+.field{display:grid; gap:6px; margin-bottom:14px}
+.field label,.field .lbl{font-weight:600; font-size:.875rem}
+.two{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px}
+.seg{display:flex; gap:8px; flex-wrap:wrap}
+.seg label{position:relative}
+.seg input{position:absolute; opacity:0; inset:0}
+.seg span{
+  display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:8px;
+  padding:8px 12px; font-weight:500; background:var(--bg);
+}
+.seg input:checked + span{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+.seg input:focus-visible + span{outline:2px solid var(--ink); outline-offset:2px}
+.err{color:var(--need); font-size:.875rem; min-height:1.2em; margin-bottom:8px}
+.matches h3{font-size:1.05rem; margin-bottom:10px}
+.mlist{display:grid; gap:8px; list-style:none; padding:0; margin:0}
+.mlist button{
+  width:100%; text-align:left; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+  display:grid; gap:2px;
+}
+.mlist button:hover{border-color:var(--ink)}
+.mlist .t{font-weight:600; font-size:.9rem; display:flex; gap:8px; align-items:flex-start}
+.mlist .t svg{margin-top:5px; flex:none}
+.mlist .m{font-family:var(--mono); font-size:.75rem; color:var(--ink-2); padding-left:20px}
+.empty-note{color:var(--ink-2); font-size:.9rem; border:1px dashed var(--line); border-radius:8px; padding:12px}
+
+/* Main grid */
+.grid{display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:32px; align-items:start}
+.stage{display:grid; gap:14px}
+@media (min-width:881px){ .stage{position:sticky; top:16px} }
+.radar{width:100%; height:auto; max-width:100%; display:block}
+.radar .disc{fill:var(--surface); stroke:var(--grid); stroke-width:1.5}
+.radar .ring{fill:none; stroke:var(--grid); stroke-width:1; stroke-dasharray:2 5}
+.radar .axis{stroke:var(--line); stroke-width:1}
+.radar text{font-family:var(--mono); fill:var(--ink-2)}
+.radar .rl{font-size:11px}
+.radar .card{font-size:13px; font-weight:500; text-anchor:middle; dominant-baseline:middle}
+.sweep{transform-box:view-box; transform-origin:50% 50%; animation:sweep 7s linear infinite}
+.sweep path{fill:var(--offer); fill-opacity:.13}
+.sweep line{stroke:var(--offer); stroke-width:1.5; stroke-opacity:.6}
+@keyframes sweep{to{transform:rotate(360deg)}}
+.you{fill:var(--ink)}
+.youping,.ping{fill:none; stroke:var(--ink); stroke-width:1.5; transform-box:fill-box; transform-origin:center; animation:ping 2.2s ease-out infinite}
+@keyframes ping{0%{transform:scale(.6); opacity:.9} 100%{transform:scale(2.2); opacity:0}}
+.blip{cursor:pointer; outline:none}
+.blip .hit{fill:transparent}
+.b-need{--c:var(--need)} .b-offer{--c:var(--offer)} .b-meet{--c:var(--meet)}
+.blip .shape{fill:var(--c); stroke:var(--surface); stroke-width:2; paint-order:stroke; transition:transform .15s}
+.blip:hover .shape,.blip:focus-visible .shape{transform:scale(1.25)}
+.blip:focus-visible .hit{stroke:var(--ink); stroke-width:2}
+.blip.sel .shape{stroke:var(--ink); stroke-width:2.5}
+.blip .ping{stroke:var(--c)}
+
+.legend{display:flex; gap:16px; flex-wrap:wrap; font-size:.8125rem; color:var(--ink-2)}
+.legend span{display:inline-flex; align-items:center; gap:7px}
+
+.detail{border-top:1px solid var(--line); padding-top:14px; display:grid; gap:10px; min-height:210px; align-content:start}
+.detail h2{font-size:1.4rem; line-height:1.15; letter-spacing:-.01em}
+.detail p{color:var(--ink-2)}
+.tag{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase; font-weight:500}
+.t-need .tag,.d-need .tag{color:var(--need)} .t-offer .tag,.d-offer .tag{color:var(--offer)} .t-meet .tag,.d-meet .tag{color:var(--meet)}
+.meta{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 18px; margin:2px 0 0}
+.meta div{min-width:0}
+.meta dt{font-family:var(--mono); font-size:.6875rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2)}
+.meta dd{margin:2px 0 0; font-weight:500; overflow-wrap:anywhere}
+.actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:4px}
+.ver{color:var(--meet); vertical-align:-2px; margin-left:4px}
+
+/* Feed */
+.feedhead{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+.feedhead h2{font-size:1.5rem; letter-spacing:-.01em}
+.feed{display:grid; gap:12px}
+.post{
+  background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+  display:grid; gap:8px; cursor:pointer; min-width:0;
+}
+.post:hover{border-color:var(--grid)}
+.post.sel{border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+.post .head{display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap}
+.post h3{font-size:1.125rem; line-height:1.25; letter-spacing:-.005em}
+.post .body{color:var(--ink-2); font-size:.9375rem}
+.post .foot{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap}
+.post .who{font-size:.8125rem; color:var(--ink-2); min-width:0; overflow-wrap:anywhere}
+.mono{font-family:var(--mono); font-size:.75rem; color:var(--ink-2)}
+.life{height:3px; background:var(--line); border-radius:2px; overflow:hidden}
+.life i{display:block; height:100%; background:var(--c)}
+.t-need{--c:var(--need)} .t-offer{--c:var(--offer)} .t-meet{--c:var(--meet)}
+.promo{font-family:var(--mono); font-size:.6875rem; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--ink); border-radius:4px; padding:1px 6px}
+.empty{border:1px dashed var(--grid); border-radius:10px; padding:26px; color:var(--ink-2)}
+.empty strong{color:var(--ink); display:block; margin-bottom:4px; font-family:var(--display); font-size:1.15rem}
+
+/* Organisers */
+.org{margin-top:48px; border-top:1px solid var(--line); padding-top:26px; display:grid; gap:18px}
+.org h2{font-size:1.6rem; letter-spacing:-.015em; max-width:22ch}
+.org .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:22px}
+.org h3{font-size:1.05rem; margin-bottom:4px}
+.org p{color:var(--ink-2); font-size:.9375rem}
+.foot-note{margin-top:30px; color:var(--ink-2); font-size:.8125rem; max-width:70ch}
+
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+  background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:8px; font-weight:500; z-index:20;
+  max-width:calc(100% - 32px);
+}
+
+@media (max-width:880px){
+  .grid{grid-template-columns:minmax(0,1fr); gap:26px}
+  .composer{grid-template-columns:minmax(0,1fr); padding:16px}
+  .sep{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .sweep,.live i,.youping,.ping{animation:none}
+  .blip .shape{transition:none}
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="2 3"/><circle cx="22" cy="10" r="3.4" fill="var(--need)"/><circle cx="16" cy="16" r="2" fill="currentColor"/></svg>
+      LifeLink
+    </div>
+    <button class="btn" id="postBtn" type="button" aria-expanded="false" aria-controls="composer">Post to the radar</button>
+  </header>
+
+  <section class="hero">
+    <span class="live"><i></i><span id="liveCount">Scanning</span></span>
+    <h1>What is happening within walking distance?</h1>
+    <p>Needs, offers and plans from your neighbours, placed on one radar. Search it, join something in a tap, or put up your own. Every post fades when its time is up.</p>
+  </section>
+
+  <section class="composer" id="composer" hidden aria-label="New post">
+    <form id="form" novalidate>
+      <h2>Put something on the radar</h2>
+      <p class="hint">It appears on your neighbours' radar straight away and disappears when the timer ends.</p>
+      <div class="field">
+        <span class="lbl" id="typeLbl">What is it?</span>
+        <div class="seg" role="radiogroup" aria-labelledby="typeLbl">
+          <label><input type="radio" name="ptype" id="pt-need" value="need" checked><span><svg class="g g-need" viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><circle r="5"/></svg>I need</span></label>
+          <label><input type="radio" name="ptype" id="pt-offer" value="offer"><span><svg class="g g-offer" viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><path d="M0 -6L6 0L0 6L-6 0Z"/></svg>I offer</span></label>
+          <label><input type="radio" name="ptype" id="pt-meet" value="meet"><span><svg class="g g-meet" viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><path d="M0 -5.5L5.2 4.2L-5.2 4.2Z"/></svg>I'm organizing</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pTitle">Headline</label>
+        <input type="text" id="pTitle" maxlength="90" placeholder="Two more players for tape-ball cricket tonight" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="pBody">Details</label>
+        <textarea id="pBody" maxlength="280" placeholder="When, where, and anything people should bring."></textarea>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="pCat">Category</label>
+          <select id="pCat" style="width:100%"></select>
+        </div>
+        <div class="field">
+          <label for="pLast">Stays up for</label>
+          <select id="pLast" style="width:100%">
+            <option value="1">1 hour</option>
+            <option value="3">3 hours</option>
+            <option value="24" selected>1 day</option>
+            <option value="72">3 days</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pDist">How far from you: <span id="pDistOut" class="mono" style="color:var(--ink)">0.5 km</span></label>
+        <input type="range" id="pDist" min="1" max="50" value="5">
+      </div>
+      <p class="err" id="pErr" role="alert"></p>
+      <div class="actions">
+        <button class="btn" type="submit">Publish</button>
+        <button class="btn ghost" type="button" id="cancelBtn">Cancel</button>
+      </div>
+    </form>
+    <aside class="matches" aria-live="polite">
+      <h3>Already nearby that could match</h3>
+      <div id="matches"></div>
+    </aside>
+  </section>
+
+  <div class="controls">
+    <div class="row">
+      <div class="grow"><input type="search" id="q" placeholder="Search the neighbourhood: cricket, ride, desk, tutor" aria-label="Search the neighbourhood" autocomplete="off"></div>
+      <select id="cat" aria-label="Category"></select>
+      <select id="sort" aria-label="Sort">
+        <option value="near">Nearest first</option>
+        <option value="soon">Ending soon</option>
+        <option value="hot">Most joined</option>
+      </select>
+    </div>
+    <div class="chips" id="typeChips">
+      <button type="button" class="chip" data-type="all" aria-pressed="true">Everything</button>
+      <button type="button" class="chip" data-type="need" aria-pressed="false"><svg class="g g-need" viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><circle r="5"/></svg>Needs</button>
+      <button type="button" class="chip" data-type="offer" aria-pressed="false"><svg class="g g-offer" viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><path d="M0 -6L6 0L0 6L-6 0Z"/></svg>Offers</button>
+      <button type="button" class="chip" data-type="meet" aria-pressed="false"><svg class="g g-meet" viewBox="-7 -7 14 14" width="12" height="12" aria-hidden="true"><path d="M0 -5.5L5.2 4.2L-5.2 4.2Z"/></svg>Organizing</button>
+      <span class="sep"></span>
+      <span class="lbl">Radius</span>
+      <span class="chips" id="radiusChips">
+        <button type="button" class="chip" data-r="0.5" aria-pressed="false">500 m</button>
+        <button type="button" class="chip" data-r="1" aria-pressed="false">1 km</button>
+        <button type="button" class="chip" data-r="2" aria-pressed="false">2 km</button>
+        <button type="button" class="chip" data-r="5" aria-pressed="true">5 km</button>
+      </span>
+    </div>
+  </div>
+
+  <main class="grid">
+    <section class="stage" id="stage" aria-label="Radar">
+      <svg class="radar" viewBox="0 0 600 600" role="group" aria-label="Radar of nearby posts. You are at the centre.">
+        <circle class="disc" cx="300" cy="300" r="250"/>
+        <g id="rings"></g>
+        <line class="axis" x1="300" y1="50" x2="300" y2="550"/>
+        <line class="axis" x1="50" y1="300" x2="550" y2="300"/>
+        <text class="card" x="300" y="26">N</text>
+        <text class="card" x="300" y="576">S</text>
+        <text class="card" x="580" y="300">E</text>
+        <text class="card" x="20" y="300">W</text>
+        <g class="sweep" aria-hidden="true">
+          <path d="M300 300 L126.5 93.2 A250 250 0 0 1 300 50 Z" transform="translate(0 0)"/>
+          <line x1="300" y1="300" x2="300" y2="50"/>
+        </g>
+        <circle class="youping" cx="300" cy="300" r="8"/>
+        <circle class="you" cx="300" cy="300" r="5"/>
+        <text class="rl" x="312" y="322">you</text>
+        <g id="blips"></g>
+      </svg>
+      <div class="legend" aria-hidden="true">
+        <span><svg class="g g-need" viewBox="-7 -7 14 14" width="12" height="12"><circle r="5"/></svg>Need</span>
+        <span><svg class="g g-offer" viewBox="-7 -7 14 14" width="12" height="12"><path d="M0 -6L6 0L0 6L-6 0Z"/></svg>Offer</span>
+        <span><svg class="g g-meet" viewBox="-7 -7 14 14" width="12" height="12"><path d="M0 -5.5L5.2 4.2L-5.2 4.2Z"/></svg>Organizing</span>
+        <span>Bigger signal, more people in</span>
+      </div>
+      <div class="detail" id="detail" aria-live="polite"></div>
+    </section>
+
+    <section aria-label="Feed">
+      <div class="feedhead">
+        <h2>On the radar</h2>
+        <span class="mono" id="feedCount"></span>
+      </div>
+      <div class="feed" id="feed"></div>
+    </section>
+  </main>
+
+  <section class="org">
+    <h2>Running something for the whole area?</h2>
+    <div class="cols">
+      <div><h3>Promoted pins</h3><p>Pin an event to the top of the feed for people inside your chosen radius. The Chai &amp; Pages post above shows how it looks.</p></div>
+      <div><h3>Verified organisations</h3><p>Clubs, charities and drives get a check mark and a page of their own, so neighbours know who is asking.</p></div>
+      <div><h3>Business plans</h3><p>Shops, tutors and studios get a monthly plan with repeat posts, analytics and a community page.</p></div>
+    </div>
+    <p class="foot-note">The posts marked sample are made-up examples to show how LifeLink works. Anything you post here is saved only in this browser.</p>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function(){
+  var H = 3600000, M = 60000;
+  var CATS = ['Sports','Rides','Study','Give away','Health','Creative','Help'];
+  var T = {need:{one:'Need',all:'Needs'}, offer:{one:'Offer',all:'Offers'}, meet:{one:'Organizing',all:'Organizing'}};
+  var DIRS = ['north','north-east','east','south-east','south','south-west','west','north-west'];
+
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function glyph(type,s){
+    if(type==='need') return '<circle r="'+s+'"/>';
+    if(type==='offer') return '<path d="M0 '+(-s*1.2)+'L'+(s*1.2)+' 0L0 '+(s*1.2)+'L'+(-s*1.2)+' 0Z"/>';
+    return '<path d="M0 '+(-s*1.1)+'L'+(s*1.05)+' '+(s*.85)+'L'+(-s*1.05)+' '+(s*.85)+'Z"/>';
+  }
+  function icon(type){return '<svg class="g g-'+type+'" viewBox="-8 -8 16 16" width="12" height="12" aria-hidden="true">'+glyph(type,5.2)+'</svg>'}
+  var VER = '<svg class="ver" viewBox="0 0 16 16" width="14" height="14" role="img" aria-label="Verified organisation"><circle cx="8" cy="8" r="8" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.5-4.8" fill="none" stroke="var(--surface)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function fmtDist(d){return d<1 ? Math.round(d*1000)+' m' : (Math.round(d*10)/10)+' km'}
+  function compass(a){return DIRS[Math.round(a/45)%8]}
+  function fmtLeft(ms){
+    if(ms<=0) return 'Ended';
+    var m=Math.round(ms/M);
+    if(m<60) return m+' min left';
+    var h=Math.floor(m/60); if(h<24) return h+' h '+(m%60)+' min left';
+    return Math.round(h/24)+' days left';
+  }
+
+  var now0 = Date.now();
+  var SEEDS = [
+    {id:'s1',type:'meet',cat:'Sports',title:'Tape-ball cricket tonight, need 2 more players',body:'Six a side on the ground behind the Block C park, 6:30 pm under floodlights. Bring your own bat if you have one.',by:'Hamza',dist:.6,joins:9,left:5,span:8},
+    {id:'s2',type:'offer',cat:'Rides',title:'Driving to Islamabad Friday 7 am, 3 seats free',body:'Leaving from the main gate, back on Sunday evening. We split the petrol, nothing extra.',by:'Sana',dist:2.1,joins:2,left:46,span:72},
+    {id:'s3',type:'need',cat:'Study',title:'Partner wanted for a Data Structures project',body:'Final-year CS. Linked lists and trees assignment, due in two weeks. I can meet at the library after 4 pm.',by:'Areeb',dist:.9,joins:1,left:20,span:72},
+    {id:'s4',type:'offer',cat:'Give away',title:'Free study desk and chair, you collect',body:'Solid wood desk, one drawer sticks a little. Pick it up from the gate any time before Saturday.',by:'Mrs. Qureshi',dist:.4,joins:3,left:30,span:72},
+    {id:'s5',type:'meet',cat:'Health',title:'Blood donation drive this Sunday, 10 am to 2 pm',body:'Run with a licensed blood bank. Bring your CNIC, eat beforehand, and bring a friend.',by:'Green Street Youth Club',verified:true,dist:1.7,joins:23,left:60,span:120},
+    {id:'s6',type:'need',cat:'Creative',title:'Photographer looking for a collaborator on a street series',body:'I shoot, you style or write captions. Four short evening walks, shared credit on everything we publish.',by:'Noor',dist:1.2,joins:4,left:70,span:96},
+    {id:'s7',type:'meet',cat:'Study',title:'Statistics revision group, three evenings this week',body:'Past papers and chai, 8 to 10 pm. Capped at eight people so everyone gets a turn to talk.',by:'Faizan',dist:.8,joins:5,left:26,span:48},
+    {id:'s8',type:'need',cat:'Help',title:'Need a plumber recommendation, kitchen tap is leaking',body:'Someone honest who has fixed a tap in this area. A name and number is enough.',by:'Ayesha',dist:.3,joins:0,left:6,span:12},
+    {id:'s9',type:'offer',cat:'Study',title:'Free O-level maths tutoring this week',body:'Two one-hour slots a day for students who are stuck. Bring your last test paper.',by:'Bilal',dist:2.8,joins:6,left:40,span:72},
+    {id:'s10',type:'need',cat:'Rides',title:'Ride to the airport tomorrow at 4 am',body:'One passenger, one suitcase. Happy to pay half of a taxi fare to share.',by:'Imran',dist:1.4,joins:0,left:2.5,span:6},
+    {id:'s11',type:'meet',cat:'Give away',title:'Winter clothes collection, drop a bag at the corner shop',body:'Clean jackets, blankets and shoes. We deliver everything to families on Sunday.',by:'Corner Kids Collective',dist:3.2,joins:11,left:95,span:168},
+    {id:'s12',type:'meet',cat:'Creative',title:'Chai and Pages book swap, Saturday 4 pm',body:'Bring one book, take one book. Free chai for the first twenty readers.',by:'Chai & Pages Café',promoted:true,verified:true,dist:1.1,joins:14,left:44,span:120},
+    {id:'s13',type:'need',cat:'Sports',title:'Badminton doubles partner, weekday mornings',body:'Intermediate level, 6:30 am at the community hall. Rackets provided if you forget yours.',by:'Dr. Hira',dist:1.9,joins:2,left:55,span:96},
+    {id:'s14',type:'offer',cat:'Creative',title:'Lending a DSLR and two lenses for a weekend',body:'Free for a student project. Leave your university ID with me and return it Monday.',by:'Saad',dist:4.2,joins:3,left:36,span:72}
+  ].map(function(s,i){
+    s.angle = (i*137.508+20)%360;
+    s.created = now0-(s.span-s.left)*H;
+    s.expires = now0+s.left*H;
+    s.sample = true;
+    return s;
+  });
+
+  var store = {mine:[], joined:[]};
+  try{
+    var raw = localStorage.getItem('lifelink.v1');
+    if(raw){ var o = JSON.parse(raw); if(o && Array.isArray(o.mine)) store.mine=o.mine; if(o && Array.isArray(o.joined)) store.joined=o.joined; }
+  }catch(e){}
+  function save(){ try{ localStorage.setItem('lifelink.v1', JSON.stringify(store)); }catch(e){} }
+
+  var state = {radius:5, type:'all', cat:'all', sort:'near', q:'', sel:null};
+  var $ = function(id){return document.getElementById(id)};
+
+  function live(){
+    var t = Date.now();
+    store.mine = store.mine.filter(function(p){return p.expires>t});
+    return SEEDS.concat(store.mine).filter(function(p){return p.expires>t});
+  }
+  function nJoins(p){return p.joins + (store.joined.indexOf(p.id)>-1?1:0)}
+  function visible(){
+    var q = state.q.trim().toLowerCase();
+    var list = live().filter(function(p){
+      if(p.dist>state.radius) return false;
+      if(state.type!=='all' && p.type!==state.type) return false;
+      if(state.cat!=='all' && p.cat!==state.cat) return false;
+      if(q && (p.title+' '+p.body+' '+p.cat+' '+p.by).toLowerCase().indexOf(q)<0) return false;
+      return true;
+    });
+    list.sort(function(a,b){
+      if(!!b.promoted!==!!a.promoted) return b.promoted?1:-1;
+      if(state.sort==='soon') return a.expires-b.expires;
+      if(state.sort==='hot') return nJoins(b)-nJoins(a);
+      return a.dist-b.dist;
+    });
+    return list;
+  }
+
+  /* ---------- Radar ---------- */
+  var R = 250, C = 300;
+  function renderRings(){
+    var out = '';
+    [.25,.5,.75,1].forEach(function(f){
+      var v = +(state.radius*f).toFixed(2);
+      out += '<circle class="ring" cx="300" cy="300" r="'+(R*f)+'"/>';
+      out += '<text class="rl" x="304" y="'+(C-R*f+13)+'">'+(v<1?Math.round(v*1000)+' m':v+' km')+'</text>';
+    });
+    $('rings').innerHTML = out;
+  }
+  function renderRadar(list){
+    var ordered = list.slice().sort(function(a,b){return (a.id===state.sel)-(b.id===state.sel)});
+    $('blips').innerHTML = ordered.map(function(p){
+      var r = p.dist/state.radius*R, a = p.angle*Math.PI/180;
+      var x = C + r*Math.sin(a), y = C - r*Math.cos(a);
+      var s = 6 + Math.min(nJoins(p),20)*.35;
+      var sel = p.id===state.sel;
+      return '<g class="blip b-'+p.type+(sel?' sel':'')+'" data-id="'+p.id+'" transform="translate('+x.toFixed(1)+' '+y.toFixed(1)+')" tabindex="0" role="button" aria-label="'+esc(T[p.type].one+': '+p.title+', '+fmtDist(p.dist))+'">'
+        + '<circle class="hit" r="18"/>'
+        + (sel?'<circle class="ping" r="'+(s+3)+'"/>':'')
+        + '<g class="shape">'+glyph(p.type,s)+'</g></g>';
+    }).join('');
+  }
+
+  /* ---------- Feed ---------- */
+  function joinBtn(p, cls){
+    var joined = store.joined.indexOf(p.id)>-1;
+    return '<button type="button" class="btn sm joinbtn '+(cls||'')+'" data-act="join" data-id="'+p.id+'" aria-pressed="'+joined+'">'+(joined?'You are in':'I\'m in')+'</button>';
+  }
+  function card(p){
+    var t = Date.now(), left = p.expires-t, total = p.expires-p.created;
+    var pct = Math.max(3, Math.min(100, left/total*100));
+    var who = esc(p.by) + (p.verified?VER:'') + (p.sample?' · sample':'') + (p.own?' · you':'');
+    return '<article class="post t-'+p.type+(p.id===state.sel?' sel':'')+'" data-id="'+p.id+'" tabindex="0">'
+      + '<div class="head"><span class="tag">'+icon(p.type)+T[p.type].one+' · '+esc(p.cat)+'</span>'
+      + (p.promoted?'<span class="promo">Promoted</span>':'<span class="mono">'+fmtDist(p.dist)+'</span>')+'</div>'
+      + '<h3>'+esc(p.title)+'</h3>'
+      + '<p class="body">'+esc(p.body)+'</p>'
+      + '<div class="life" aria-hidden="true"><i style="width:'+pct.toFixed(1)+'%"></i></div>'
+      + '<div class="foot"><span class="who">'+who+'</span>'
+      + '<span style="display:inline-flex;align-items:center;gap:12px"><span class="mono">'+(p.promoted?fmtDist(p.dist)+' · ':'')+fmtLeft(left)+' · '+nJoins(p)+' in</span>'+joinBtn(p)+'</span></div>'
+      + '</article>';
+  }
+  function renderFeed(list){
+    var el = $('feed');
+    if(!list.length){
+      el.innerHTML = '<div class="empty"><strong>Nothing here yet</strong>Widen the radius, clear the search, or be the first to put up what you need.</div>';
+      return;
+    }
+    el.innerHTML = list.map(card).join('');
+  }
+
+  /* ---------- Detail ---------- */
+  function renderDetail(list){
+    var p = list.filter(function(x){return x.id===state.sel})[0];
+    var el = $('detail');
+    if(!p){ el.innerHTML = '<p>Pick a signal on the radar to read it here.</p>'; return; }
+    var left = p.expires-Date.now();
+    el.className = 'detail d-'+p.type;
+    el.innerHTML = '<span class="tag">'+icon(p.type)+T[p.type].one+' · '+esc(p.cat)+(p.promoted?' · Promoted':'')+'</span>'
+      + '<h2>'+esc(p.title)+'</h2>'
+      + '<p>'+esc(p.body)+'</p>'
+      + '<dl class="meta">'
+      + '<div><dt>Distance</dt><dd>'+fmtDist(p.dist)+', '+compass(p.angle)+'</dd></div>'
+      + '<div><dt>Posted by</dt><dd>'+esc(p.by)+(p.verified?VER:'')+'</dd></div>'
+      + '<div><dt>Time left</dt><dd>'+fmtLeft(left)+'</dd></div>'
+      + '<div><dt>People in</dt><dd>'+nJoins(p)+'</dd></div></dl>'
+      + '<div class="actions">'+joinBtn(p)+(p.own?'<button type="button" class="btn ghost sm" data-act="remove" data-id="'+p.id+'">Take down</button>':'')+'</div>';
+  }
+
+  function renderAll(){
+    var list = visible();
+    if(!list.some(function(p){return p.id===state.sel})) state.sel = list.length ? list[0].id : null;
+    renderRings();
+    renderRadar(list);
+    renderFeed(list);
+    renderDetail(list);
+    $('liveCount').textContent = list.length+' live within '+(state.radius<1?'500 m':state.radius+' km');
+    $('feedCount').textContent = list.length+(list.length===1?' signal':' signals');
+  }
+
+  /* ---------- Toast ---------- */
+  var tt;
+  function toast(msg){
+    var el = $('toast'); el.textContent = msg; el.hidden = false;
+    clearTimeout(tt); tt = setTimeout(function(){el.hidden=true}, 2600);
+  }
+
+  /* ---------- Controls ---------- */
+  var catHtml = '<option value="all">All categories</option>' + CATS.map(function(c){return '<option>'+c+'</option>'}).join('');
+  $('cat').innerHTML = catHtml;
+  $('pCat').innerHTML = CATS.map(function(c){return '<option>'+c+'</option>'}).join('');
+
+  $('q').addEventListener('input', function(e){state.q=e.target.value; renderAll()});
+  $('cat').addEventListener('change', function(e){state.cat=e.target.value; renderAll()});
+  $('sort').addEventListener('change', function(e){state.sort=e.target.value; renderAll()});
+  $('typeChips').addEventListener('click', function(e){
+    var b = e.target.closest('[data-type]'); if(!b) return;
+    state.type = b.getAttribute('data-type');
+    [].forEach.call($('typeChips').querySelectorAll('[data-type]'), function(x){x.setAttribute('aria-pressed', x===b)});
+    renderAll();
+  });
+  function setRadius(r){
+    state.radius = r;
+    [].forEach.call($('radiusChips').querySelectorAll('[data-r]'), function(x){x.setAttribute('aria-pressed', parseFloat(x.getAttribute('data-r'))===r)});
+  }
+  $('radiusChips').addEventListener('click', function(e){
+    var b = e.target.closest('[data-r]'); if(!b) return;
+    setRadius(parseFloat(b.getAttribute('data-r'))); renderAll();
+  });
+
+  function select(id){ state.sel = id; renderAll(); }
+  $('blips').addEventListener('click', function(e){
+    var g = e.target.closest('[data-id]'); if(g) select(g.getAttribute('data-id'));
+  });
+  $('blips').addEventListener('keydown', function(e){
+    if(e.key==='Enter' || e.key===' '){
+      var g = e.target.closest('[data-id]');
+      if(g){ e.preventDefault(); var id=g.getAttribute('data-id'); select(id); var n=$('blips').querySelector('[data-id="'+id+'"]'); if(n) n.focus(); }
+    }
+  });
+
+  function onAction(e){
+    var b = e.target.closest('[data-act]');
+    if(b){
+      e.stopPropagation();
+      var id = b.getAttribute('data-id'), act = b.getAttribute('data-act');
+      if(act==='join'){
+        var i = store.joined.indexOf(id);
+        if(i>-1){ store.joined.splice(i,1); toast('You left this one'); }
+        else { store.joined.push(id); toast('You are in. The poster will see you on their list.'); }
+        save(); state.sel = id; renderAll();
+      } else if(act==='remove'){
+        store.mine = store.mine.filter(function(p){return p.id!==id});
+        store.joined = store.joined.filter(function(x){return x!==id});
+        save(); toast('Taken down'); renderAll();
+      }
+      return;
+    }
+    var art = e.target.closest('.post');
+    if(art) select(art.getAttribute('data-id'));
+  }
+  $('feed').addEventListener('click', onAction);
+  $('detail').addEventListener('click', onAction);
+  $('feed').addEventListener('keydown', function(e){
+    if((e.key==='Enter'||e.key===' ') && e.target.classList.contains('post')){
+      e.preventDefault(); var id=e.target.getAttribute('data-id'); select(id);
+      var n=$('feed').querySelector('[data-id="'+id+'"]'); if(n) n.focus();
+    }
+  });
+
+  /* ---------- Composer ---------- */
+  function composerType(){var r=document.querySelector('input[name="ptype"]:checked'); return r?r.value:'need'}
+  function pDistKm(){return parseInt($('pDist').value,10)/10}
+  function renderMatches(){
+    var type = composerType(), cat = $('pCat').value, title = $('pTitle').value.toLowerCase();
+    var want = type==='offer' ? ['need'] : type==='need' ? ['offer','meet'] : ['need'];
+    var words = title.split(/\W+/).filter(function(w){return w.length>3});
+    var found = live().filter(function(p){
+      if(want.indexOf(p.type)<0) return false;
+      var hay = (p.title+' '+p.body).toLowerCase();
+      return p.cat===cat || words.some(function(w){return hay.indexOf(w)>-1});
+    }).sort(function(a,b){return a.dist-b.dist}).slice(0,3);
+    var el = $('matches');
+    if(!found.length){
+      el.innerHTML = '<p class="empty-note">Nothing matching yet in '+esc(cat)+'. You would be the first signal here.</p>';
+      return;
+    }
+    el.innerHTML = '<ul class="mlist">'+found.map(function(p){
+      return '<li><button type="button" data-match="'+p.id+'"><span class="t">'+icon(p.type)+'<span>'+esc(p.title)+'</span></span><span class="m">'+T[p.type].one+' · '+fmtDist(p.dist)+' · '+fmtLeft(p.expires-Date.now())+'</span></button></li>';
+    }).join('')+'</ul>';
+  }
+  function openComposer(open){
+    var c = $('composer'); c.hidden = !open;
+    $('postBtn').setAttribute('aria-expanded', open);
+    $('postBtn').textContent = open ? 'Close' : 'Post to the radar';
+    if(open){ renderMatches(); $('pTitle').focus({preventScroll:true}); c.scrollIntoView({block:'nearest'}); }
+  }
+  $('postBtn').addEventListener('click', function(){openComposer($('composer').hidden)});
+  $('cancelBtn').addEventListener('click', function(){openComposer(false)});
+  $('pDist').addEventListener('input', function(){
+    var d = pDistKm(); $('pDistOut').textContent = d<1 ? Math.round(d*1000)+' m' : d+' km';
+  });
+  ['pTitle','pCat'].forEach(function(id){$(id).addEventListener('input', renderMatches)});
+  document.querySelectorAll('input[name="ptype"]').forEach(function(r){r.addEventListener('change', renderMatches)});
+  $('matches').addEventListener('click', function(e){
+    var b = e.target.closest('[data-match]'); if(!b) return;
+    var id = b.getAttribute('data-match'), p = live().filter(function(x){return x.id===id})[0];
+    if(!p) return;
+    state.type='all'; state.cat='all'; state.q=''; $('q').value=''; $('cat').value='all';
+    [].forEach.call($('typeChips').querySelectorAll('[data-type]'), function(x){x.setAttribute('aria-pressed', x.getAttribute('data-type')==='all')});
+    if(p.dist>state.radius){ setRadius(p.dist<=1?1:p.dist<=2?2:5); }
+    openComposer(false); select(id);
+    $('stage').scrollIntoView({block:'start'});
+  });
+  $('form').addEventListener('submit', function(e){
+    e.preventDefault();
+    var title = $('pTitle').value.trim();
+    if(title.length<4){ $('pErr').textContent = 'Add a short headline so neighbours know what this is.'; $('pTitle').focus(); return; }
+    $('pErr').textContent = '';
+    var type = composerType(), hrs = parseInt($('pLast').value,10), t = Date.now();
+    var p = {
+      id:'u'+t, type:type, cat:$('pCat').value, title:title,
+      body:$('pBody').value.trim() || 'No extra details yet.',
+      by:'You', dist:pDistKm(), joins:0, angle:Math.random()*360,
+      created:t, expires:t+hrs*H, own:true
+    };
+    store.mine.push(p); save();
+    state.type='all'; state.cat='all'; state.q=''; $('q').value=''; $('cat').value='all';
+    [].forEach.call($('typeChips').querySelectorAll('[data-type]'), function(x){x.setAttribute('aria-pressed', x.getAttribute('data-type')==='all')});
+    if(p.dist>state.radius) setRadius(p.dist<=1?1:p.dist<=2?2:5);
+    state.sel = p.id;
+    $('form').reset(); $('pDistOut').textContent='0.5 km';
+    openComposer(false); renderAll();
+    toast('It is on the radar');
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    $('stage').scrollIntoView({block:'start', behavior: reduce?'auto':'smooth'});
+  });
+
+  setInterval(function(){
+    var a = document.activeElement;
+    if(a && a.closest && a.closest('#feed, #blips')) return;
+    renderAll();
+  }, 30000);
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
